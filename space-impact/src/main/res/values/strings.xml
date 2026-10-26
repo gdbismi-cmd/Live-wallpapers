@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Space Impact LWP</string>
+    <string name="wallpaper_name">Space Impact</string>
+    <string name="wallpaper_description">A retro, Nokia-style space shooter that plays itself on your home screen. Tap empty space to fire a missile.</string>
+
+    <string name="settings_intro">A self-playing tribute to the classic monochrome phone shooter: auto-piloted ship, alien waves, bosses, a scrolling landscape and that green LCD glow.</string>
+    <string name="settings_palette">LCD colors</string>
+    <string name="palette_nokia">Classic green</string>
+    <string name="palette_night">Night (dark)</string>
+    <string name="palette_amber">Amber</string>
+    <string name="palette_pocket">Pocket console</string>
+    <string name="settings_apply">Set live wallpaper</string>
+    <string name="settings_tip">Tip: tap an empty spot on your home screen to steer the ship there and launch a missile.</string>
+    <string name="settings_no_picker">This device has no live wallpaper picker.</string>
+</resources>

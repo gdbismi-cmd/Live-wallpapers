@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The player ship from Sprites.PLAYER on an LCD-green tile. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="16"
+    android:viewportHeight="16">
+    <path
+        android:fillColor="#FFC7F0D8"
+        android:pathData="M2,0h12a2,2 0,0 1,2 2v12a2,2 0,0 1,-2 2h-12a2,2 0,0 1,-2 -2v-12a2,2 0,0 1,2 -2z" />
+    <path
+        android:fillColor="#FF43523D"
+        android:pathData="M3,4.5h2v1h-2zM3,5.5h4v1h-4zM4,6.5h5v1h-5zM3,7.5h10v1h-10zM4,8.5h5v1h-5zM3,9.5h4v1h-4zM3,10.5h2v1h-2zM13,3h1v1h-1zM14,12h1v1h-1zM2,13h1v1h-1z" />
+</vector>
