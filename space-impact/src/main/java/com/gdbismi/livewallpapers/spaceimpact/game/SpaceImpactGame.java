@@ -28,6 +28,7 @@ public final class SpaceImpactGame {
     private static final float PLAYER_SPEED = 1.6f;
     private static final float SHOT_SPEED = 3f;
     private static final float MISSILE_SPEED = 2.5f;
+    private static final float STALK_SPEED = 0.45f;
     private static final int DODGE_HORIZON = 12; // ticks of warning the autopilot needs
     private static final int NEAR_MISS_PER_MILLE = 2; // chance per tick while not lined up
     private static final float PLAYER_DRIFT = 0.4f; // max horizontal speed while bobbing
@@ -45,7 +46,7 @@ public final class SpaceImpactGame {
         ORB(Sprites.ORB, 2, 0.6f, Pattern.STRAIGHT, 10, true),
         JET(Sprites.JET, 1, 1.5f, Pattern.STRAIGHT, 5, false),
         ROCK(Sprites.ROCK, 3, 0.5f, Pattern.ZIGZAG, 15, false),
-        BOSS(Sprites.BOSS, 30, 0.5f, Pattern.BOSS, 100, true);
+        BOSS(null, 30, 0.5f, Pattern.BOSS, 100, true); // frames are generated per boss
 
         final Sprite[] frames;
         final int hp;
@@ -64,6 +65,12 @@ public final class SpaceImpactGame {
         }
     }
 
+    /** How a boss moves up and down once it has arrived. */
+    private enum BossMove { WAVE, BOUNCE, WOBBLE, STALK }
+
+    /** Boss volleys; each boss alternates between two of these. */
+    private enum BossAttack { SPREAD, FAN, AIMED, BURST, WALL }
+
     private static final EnemyType[] WAVE_TYPES = {
             EnemyType.BUG, EnemyType.ORB, EnemyType.JET, EnemyType.ROCK
     };
@@ -73,22 +80,29 @@ public final class SpaceImpactGame {
         float x, y, baseY, vy, phase;
         int hp, age, fireTimer, flash, volleys;
         boolean dead;
+        Sprite[] frames;
+        // Boss only: randomized for every boss.
+        BossMove move;
+        float moveFreq;
+        BossAttack[] attacks;
+        int fireInterval;
 
         Enemy(EnemyType type) {
             this.type = type;
             this.hp = type.hp;
+            this.frames = type.frames;
         }
 
         Sprite frame() {
-            return type.frames[(age / 8) % type.frames.length];
+            return frames[(age / 8) % frames.length];
         }
 
         int w() {
-            return type.frames[0].w;
+            return frames[0].w;
         }
 
         int h() {
-            return type.frames[0].h;
+            return frames[0].h;
         }
 
         float cy() {
@@ -627,11 +641,23 @@ public final class SpaceImpactGame {
         }
     }
 
+    /** Every boss is new: its look, movement, pair of attacks, fire rate and health. */
     private void spawnBoss() {
         Enemy b = new Enemy(EnemyType.BOSS);
-        b.hp = 20 + 10 * level;
+        b.frames = Bosses.create(rng);
+        BossMove[] moves = BossMove.values();
+        b.move = moves[rng.nextInt(moves.length)];
+        b.moveFreq = 0.018f + rng.nextFloat() * 0.017f;
+        BossAttack[] all = BossAttack.values();
+        BossAttack first = all[rng.nextInt(all.length)];
+        BossAttack second = all[rng.nextInt(all.length - 1)];
+        if (second.ordinal() >= first.ordinal()) second = all[second.ordinal() + 1];
+        b.attacks = new BossAttack[] {first, second};
+        b.fireInterval = 45 + rng.nextInt(20);
+        b.hp = Math.round((20 + 10 * level) * (0.8f + 0.4f * rng.nextFloat()));
+        b.age = rng.nextInt(1000); // start each movement pattern at a random point
         b.x = width + 2;
-        b.y = (playTop + playBottom - b.h()) / 2f;
+        b.y = b.move == BossMove.STALK ? (playTop + playBottom - b.h()) / 2f : bossY(b, b.age);
         b.fireTimer = 60;
         boss = b;
         enemies.add(b);
@@ -694,27 +720,70 @@ public final class SpaceImpactGame {
         float homeX = width - b.w() - 3;
         boolean arrived = b.x <= homeX;
         if (!arrived) b.x -= b.type.speed;
-        b.y = bossY(b, b.age);
+        if (b.move == BossMove.STALK) {
+            b.y = stalkY(b, 1);
+        } else {
+            b.y = bossY(b, b.age);
+        }
         if (!arrived || !canFire || --b.fireTimer > 0) return;
 
         float vx = -(1.5f + 0.1f * level);
         float x = b.x - 2;
         float y = b.cy();
-        if (b.volleys++ % 2 == 0) {
-            enemyShot(x, y, vx, -0.45f);
-            enemyShot(x, y, vx, 0f);
-            enemyShot(x, y, vx, 0.45f);
-        } else {
-            float frames = (x - playerX) / -vx;
-            enemyShot(x, y, vx, clamp((playerY + PH / 2f - y) / frames, -1f, 1f));
+        switch (b.attacks[b.volleys++ % 2]) {
+            case SPREAD:
+                for (int i = -1; i <= 1; i++) enemyShot(x, y, vx, 0.45f * i);
+                break;
+            case FAN:
+                for (int i = -2; i <= 2; i++) enemyShot(x, y, vx, 0.4f * i);
+                break;
+            case AIMED:
+                enemyShot(x, y, vx, aimAtPlayer(x, y, vx));
+                break;
+            case BURST: // a tight line of three aimed shots
+                float vy = aimAtPlayer(x, y, vx);
+                for (int i = 0; i < 3; i++) enemyShot(x + 5 * i, y + vy * 5 * i / vx, vx, vy);
+                break;
+            case WALL: // a column of shots with one gap to slip through
+                int gap = rng.nextInt(5);
+                for (int i = 0; i < 5; i++) {
+                    if (i != gap) enemyShot(x, y + (i - 2) * 5, vx, 0f);
+                }
+                break;
         }
-        b.fireTimer = Math.max(25, 55 - level * 5);
+        b.fireTimer = Math.max(25, b.fireInterval - level * 5);
     }
 
+    private float aimAtPlayer(float x, float y, float vx) {
+        float frames = (x - playerX) / -vx;
+        return clamp((playerY + PH / 2f - y) / frames, -1f, 1f);
+    }
+
+    /** Where a stalking boss will be in {@code t} ticks, closing in on the ship's current row. */
+    private float stalkY(Enemy b, float t) {
+        float target = playerY + PH / 2f - b.h() / 2f;
+        float step = STALK_SPEED * t;
+        return clamp(b.y + clamp(target - b.y, -step, step), playTop, playBottom - b.h());
+    }
+
+    /** The boss's row at a given age. */
     private float bossY(Enemy b, float age) {
         float mid = (playTop + playBottom - b.h()) / 2f;
         float amp = (playBottom - playTop - b.h()) / 2f;
-        return mid + amp * (float) Math.sin(age * 0.025);
+        float a = age * b.moveFreq;
+        switch (b.move) {
+            case BOUNCE: { // triangle wave: straight runs between the top and bottom
+                float p = a / (float) (2 * Math.PI);
+                return mid + amp * (4 * Math.abs(p - (float) Math.floor(p + 0.5f)) - 1);
+            }
+            case WOBBLE:
+                return mid + amp * (0.65f * (float) Math.sin(a)
+                        + 0.35f * (float) Math.sin(a * 2.7f + 1));
+            case STALK:
+                return stalkY(b, age - b.age);
+            default:
+                return mid + amp * (float) Math.sin(a);
+        }
     }
 
     private float speedMul() {
