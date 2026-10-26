@@ -582,10 +582,19 @@ public final class SpaceImpactGame {
         collide();
         updatePickups();
         updateExplosions();
-        enemies.removeIf(e -> e.dead);
-        shots.removeIf(s -> s.dead);
-        pickups.removeIf(p -> p.dead);
-        explosions.removeIf(Explosion::done);
+        // Plain loops rather than removeIf lambdas keep the bytecode dexable by any toolchain.
+        for (int i = enemies.size() - 1; i >= 0; i--) {
+            if (enemies.get(i).dead) enemies.remove(i);
+        }
+        for (int i = shots.size() - 1; i >= 0; i--) {
+            if (shots.get(i).dead) shots.remove(i);
+        }
+        for (int i = pickups.size() - 1; i >= 0; i--) {
+            if (pickups.get(i).dead) pickups.remove(i);
+        }
+        for (int i = explosions.size() - 1; i >= 0; i--) {
+            if (explosions.get(i).done()) explosions.remove(i);
+        }
     }
 
     private void updateEnemies() {

@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.util.TypedValue;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -23,7 +24,7 @@ public class SettingsActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        SharedPreferences prefs = getSharedPreferences(Palette.PREFS_NAME, MODE_PRIVATE);
+        final SharedPreferences prefs = getSharedPreferences(Palette.PREFS_NAME, MODE_PRIVATE);
         int pad = dp(24);
 
         LinearLayout root = new LinearLayout(this);
@@ -52,9 +53,14 @@ public class SettingsActivity extends Activity {
             group.addView(button);
         }
         group.check(current.ordinal() + 1);
-        group.setOnCheckedChangeListener((g, checkedId) -> prefs.edit()
-                .putString(Palette.KEY_PALETTE, Palette.values()[checkedId - 1].name())
-                .apply());
+        group.setOnCheckedChangeListener(new RadioGroup.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(RadioGroup g, int checkedId) {
+                prefs.edit()
+                        .putString(Palette.KEY_PALETTE, Palette.values()[checkedId - 1].name())
+                        .apply();
+            }
+        });
         root.addView(group);
 
         Button apply = new Button(this);
@@ -62,7 +68,12 @@ public class SettingsActivity extends Activity {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.topMargin = pad;
-        apply.setOnClickListener(v -> openWallpaperPicker());
+        apply.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                openWallpaperPicker();
+            }
+        });
         root.addView(apply, lp);
 
         TextView tip = new TextView(this);

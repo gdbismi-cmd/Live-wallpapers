@@ -25,7 +25,12 @@ public class SpaceImpactWallpaperService extends WallpaperService {
         private static final long FRAME_MS = 1000L / SpaceImpactGame.TICKS_PER_SECOND;
 
         private final Handler handler = new Handler(Looper.getMainLooper());
-        private final Runnable frame = this::drawFrame;
+        private final Runnable frame = new Runnable() {
+            @Override
+            public void run() {
+                drawFrame();
+            }
+        };
         private final SpaceImpactGame game = new SpaceImpactGame();
         private final LcdRenderer renderer = new LcdRenderer();
         private final float[] tap = new float[2];
