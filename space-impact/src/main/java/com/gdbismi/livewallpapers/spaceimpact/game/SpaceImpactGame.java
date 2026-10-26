@@ -26,9 +26,10 @@ public final class SpaceImpactGame {
     private static final int MAX_MISSILES = 9;
     private static final int FIRE_COOLDOWN = 6;
     private static final float PLAYER_SPEED = 1.6f;
-    // Faster than the fastest enemy (JET at the 2x speed cap), so homing shots always catch up.
-    private static final float SHOT_SPEED = 4.5f;
-    private static final float MISSILE_SPEED = 3.5f;
+    private static final float SHOT_SPEED = 3f;
+    private static final float MISSILE_SPEED = 2.5f;
+    private static final int DODGE_HORIZON = 12; // ticks of warning the autopilot needs
+    private static final int NEAR_MISS_PER_MILLE = 2; // chance per tick while not lined up
     private static final float PLAYER_DRIFT = 0.4f; // max horizontal speed while bobbing
     private static final int GHOST_DECAY = 125; // out of 256, applied per frame to unlit pixels
 
@@ -100,8 +101,8 @@ public final class SpaceImpactGame {
     private static final class Shot {
         final ShotKind kind;
         float x, y;
-        float vx, vy;
-        Enemy target; // player shots home in on this enemy
+        final float vx, vy;
+        Enemy target; // the enemy a player shot was aimed at
         boolean hit, dead;
 
         Shot(ShotKind kind, float x, float y, float vx, float vy) {
@@ -171,7 +172,6 @@ public final class SpaceImpactGame {
     private float playerX, playerY;
     private boolean playerAlive;
     private int respawnTimer, invulnerable, fireCooldown;
-    private float aiJitter;
     private float manualY;
     private int manualTimer;
     private float[] dangerT = new float[64];
@@ -181,11 +181,8 @@ public final class SpaceImpactGame {
 
     private final List<Enemy> enemies = new ArrayList<>();
     private final List<Shot> shots = new ArrayList<>();
-    /**
-     * Player bullets and missiles fired, how many left the screen without hitting, and how many
-     * popped in mid-air because every enemy was already gone.
-     */
-    int playerShotsFired, playerShotsMissed, playerShotsFizzled;
+    /** Player bullets and missiles fired, and how many left the screen without hitting. */
+    int playerShotsFired, playerShotsMissed;
     private final List<Explosion> explosions = new ArrayList<>();
     private final List<Pickup> pickups = new ArrayList<>();
     private Enemy boss;
@@ -260,12 +257,10 @@ public final class SpaceImpactGame {
         if (phase != Phase.PLAYING || !playerAlive) return;
         manualY = y;
         manualTimer = 2 * TICKS_PER_SECOND;
-        Enemy target = pickTarget(true);
-        if (target == null) return;
         if (missiles > 0) {
-            fireMissile(target);
+            fireMissile(aimedTarget(ShotKind.MISSILE, 0f));
         } else if (fireCooldown == 0) {
-            fireShot(target);
+            fireShot(aimedTarget(ShotKind.PLAYER, 0f));
         }
     }
 
@@ -394,11 +389,16 @@ public final class SpaceImpactGame {
         if (fireCooldown > 0) {
             fireCooldown--;
         } else {
-            Enemy shotTarget = pickTarget(true);
+            Enemy shotTarget = aimedTarget(ShotKind.PLAYER, 0f);
+            // Now and then the autopilot is trigger-happy and fires when almost lined up, so
+            // roughly 1% of its shots miss, like a human player's would.
+            if (shotTarget == null && rng.nextInt(1000) < NEAR_MISS_PER_MILLE) {
+                shotTarget = aimedTarget(ShotKind.PLAYER, 3f);
+            }
             if (shotTarget != null) fireShot(shotTarget);
         }
-        if (boss != null && missiles > 0 && boss.x < width - boss.w() && rng.nextInt(45) == 0
-                && pendingDamage(boss) < boss.hp) {
+        if (boss != null && missiles > 0 && rng.nextInt(45) == 0
+                && aimedTarget(ShotKind.MISSILE, 0f) == boss) {
             fireMissile(boss);
         }
     }
@@ -409,7 +409,6 @@ public final class SpaceImpactGame {
      * among the safe ones it prefers lining up with the next enemy or pickup.
      */
     private float aiTargetY() {
-        if (tick % 45 == 0) aiJitter = (rng.nextFloat() * 2 - 1) * 3;
         collectDangers();
         float goal = goalY();
         float best = playerY;
@@ -445,6 +444,11 @@ public final class SpaceImpactGame {
             float speed = PLAYER_DRIFT + (e != boss ? e.type.speed * speedMul
                     : e.x > width - e.w() - 3 ? e.type.speed : 0f);
             float t0 = Math.max(0f, dx / speed);
+            // Not a threat if the shots in flight will destroy it, or if there is time to line up
+            // and shoot it down first (the autopilot dodges if that stops being true).
+            int hitsNeeded = e.hp - pendingDamage(e);
+            if (hitsNeeded <= 0) continue;
+            if (e != boss && t0 > hitsNeeded * FIRE_COOLDOWN + 4) continue;
             float t1 = Math.min(t0 + 40, (e.x + e.w() - playerX) / speed);
             for (float t = t0; ; t += 2) {
                 float ey = predictY(e, Math.min(t, t1));
@@ -458,6 +462,8 @@ public final class SpaceImpactGame {
                     || s.x + Sprites.ENEMY_SHOT.w < playerX) continue;
             float speed = PLAYER_DRIFT - s.vx;
             float t0 = Math.max(0f, dx / speed);
+            // Keep shooting until a bullet is close; there is still time to sidestep it.
+            if (t0 > DODGE_HORIZON) continue;
             float t1 = (s.x + Sprites.ENEMY_SHOT.w - playerX) / speed;
             for (float t = t0; ; t += 1) {
                 float sy = s.y + s.vy * Math.min(t, t1);
@@ -486,12 +492,18 @@ public final class SpaceImpactGame {
             if (!p.dead && dx > 0 && dx < 45) return p.y + Sprites.PICKUP.h / 2f - PH / 2f;
         }
         float goal = (playTop + playBottom - PH) / 2f + 12 * (float) Math.sin(tick * 0.02);
+        float front = playerX + PW;
+        float speedMul = speedMul();
         float bestDx = Float.MAX_VALUE;
         for (Enemy e : enemies) {
-            float dx = e.x - playerX;
-            if (e.dead || dx < 20 || e.x > width || dx >= bestDx) continue;
+            float dx = e.x - front;
+            if (e.dead || dx < 6 || e.x > width || dx >= bestDx) continue;
+            if (pendingDamage(e) >= e.hp) continue; // already taken care of
             bestDx = dx;
-            goal = e.cy() - PH / 2f + aiJitter;
+            // Line the gun up with where the enemy will be when a bullet fired now arrives.
+            float speed = e != boss ? e.type.speed * speedMul : 0f;
+            float t = dx / (SHOT_SPEED + speed);
+            goal = predictY(e, t) + e.h() / 2f - (PH / 2 + 0.5f);
         }
         return goal;
     }
@@ -525,35 +537,31 @@ public final class SpaceImpactGame {
     }
 
     /**
-     * The nearest on-screen enemy ahead of the ship. With {@code needsDamage}, only enemies that
-     * the shots already in flight won't finish off, so no bullet is ever wasted.
+     * The enemy a straight shot fired right now would hit, predicting where each enemy will be
+     * when the shot reaches it, or null if the shot would miss. Enemies that the shots already
+     * in flight will finish off are skipped so no bullet is wasted. A positive {@code slack}
+     * also accepts shots that would pass up to that many pixels wide of the enemy.
      */
-    private Enemy pickTarget(boolean needsDamage) {
-        float cx = playerX + PW, cy = playerY + PH / 2f;
+    private Enemy aimedTarget(ShotKind kind, float slack) {
+        Sprite ss = kind == ShotKind.MISSILE ? Sprites.MISSILE : Sprites.PLAYER_SHOT;
+        float shotSpeed = kind == ShotKind.MISSILE ? MISSILE_SPEED : SHOT_SPEED;
+        float x0 = kind == ShotKind.MISSILE ? playerX + PW - 2 : playerX + PW;
+        float y0 = kind == ShotKind.MISSILE ? playerY + PH / 2 - 1 : playerY + PH / 2;
+        float speedMul = speedMul();
         Enemy best = null;
-        float bestDist = Float.MAX_VALUE;
+        float bestT = Float.MAX_VALUE;
         for (Enemy e : enemies) {
-            if (e.dead || e.x > width - 2 || e.x + e.w() < cx) continue;
-            if (needsDamage && pendingDamage(e) >= e.hp) continue;
-            float dx = e.x + e.w() / 2f - cx, dy = e.cy() - cy;
-            float dist = dx * dx + dy * dy;
-            if (dist < bestDist) {
-                bestDist = dist;
-                best = e;
-            }
-        }
-        return best;
-    }
-
-    private Enemy nearestOnScreen(Shot s) {
-        Enemy best = null;
-        float bestDist = Float.MAX_VALUE;
-        for (Enemy e : enemies) {
-            if (e.dead || e.x > width - 2) continue;
-            float dx = e.x + e.w() / 2f - s.x, dy = e.cy() - s.y;
-            float dist = dx * dx + dy * dy;
-            if (dist < bestDist) {
-                bestDist = dist;
+            if (e.dead || e.x > width - 2 || e.x + e.w() < x0) continue;
+            if (pendingDamage(e) >= e.hp) continue;
+            float speed = e != boss ? e.type.speed * speedMul
+                    : e.x > width - e.w() - 3 ? e.type.speed : 0f;
+            float t = Math.max(0f, (e.x - (x0 + ss.w)) / (shotSpeed + speed));
+            float ey = predictY(e, t);
+            // Without slack, require half a pixel to spare so rounding can't cause a miss.
+            float margin = 0.5f - slack;
+            if (y0 + ss.h <= ey + margin || y0 >= ey + e.h() - margin) continue;
+            if (t < bestT) {
+                bestT = t;
                 best = e;
             }
         }
@@ -578,7 +586,8 @@ public final class SpaceImpactGame {
 
     private void fireMissile(Enemy target) {
         missiles--;
-        Shot s = new Shot(ShotKind.MISSILE, playerX + PW - 2, playerY + PH / 2 - 1, MISSILE_SPEED, 0f);
+        Shot s = new Shot(ShotKind.MISSILE, playerX + PW - 2, playerY + PH / 2 - 1,
+                MISSILE_SPEED, 0f);
         s.target = target;
         shots.add(s);
         playerShotsFired++;
@@ -677,8 +686,7 @@ public final class SpaceImpactGame {
                 enemyShot(e.x - 2, e.cy(), -(1.6f + 0.15f * level), 0f);
                 e.fireTimer = 50 + rng.nextInt(70);
             }
-            // Stay around while a homing shot is still chasing it; it is about to be hit.
-            if (e.x + e.w() < -2 && pendingDamage(e) == 0) e.dead = true;
+            if (e.x + e.w() < -2) e.dead = true;
         }
     }
 
@@ -719,44 +727,12 @@ public final class SpaceImpactGame {
 
     private void updateShots() {
         for (Shot s : shots) {
-            if (s.kind != ShotKind.ENEMY) steer(s);
-            if (s.dead) continue;
             s.x += s.vx;
             s.y += s.vy;
-            // A homing shot always catches its target, even just past the edge of the screen.
-            boolean chasing = s.target != null && !s.target.dead;
-            if (!chasing && (s.x < -4 || s.x > width + 4
-                    || s.y < playTop - 2 || s.y > playBottom + 4)) {
+            if (s.x < -4 || s.x > width + 4 || s.y < playTop - 2 || s.y > playBottom + 4) {
                 s.dead = true;
                 if (s.kind != ShotKind.ENEMY && !s.hit) playerShotsMissed++;
             }
-        }
-    }
-
-    /** Turns a player shot towards its target, switching targets if that one is already gone. */
-    private void steer(Shot s) {
-        if (s.target == null || s.target.dead) {
-            s.target = pickTarget(true);
-            if (s.target == null) s.target = nearestOnScreen(s);
-            if (s.target == null) {
-                // Every enemy is gone; pop rather than sail off past where they were.
-                s.dead = true;
-                if (!s.hit) playerShotsFizzled++;
-                explode(s.x, s.y, 0);
-                return;
-            }
-        }
-        Sprite ss = s.sprite();
-        float dx = s.target.x + s.target.w() / 2f - (s.x + ss.w / 2f);
-        float dy = s.target.cy() - (s.y + ss.h / 2f);
-        float dist = (float) Math.sqrt(dx * dx + dy * dy);
-        float speed = s.kind == ShotKind.MISSILE ? MISSILE_SPEED : SHOT_SPEED;
-        if (dist <= speed) {
-            s.vx = dx;
-            s.vy = dy;
-        } else {
-            s.vx = dx / dist * speed;
-            s.vy = dy / dist * speed;
         }
     }
 

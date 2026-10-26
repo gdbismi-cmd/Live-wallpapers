@@ -23,8 +23,9 @@ public class SpaceImpactGameTest {
         assertTrue("autopilot should score points", bestScore > 500);
         assertTrue("autopilot should beat at least one boss", bestLevel >= 2);
         assertTrue(game.playerShotsFired > 1000);
-        assertEquals("every player shot should hit", 0, game.playerShotsMissed);
-        assertEquals("no player shot should lose its target", 0, game.playerShotsFizzled);
+        double missRate = (double) game.playerShotsMissed / game.playerShotsFired;
+        assertTrue("about 1% of shots should miss, was " + missRate,
+                missRate > 0.003 && missRate < 0.02);
     }
 
     @Test
