@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <PreferenceCategory android:title="@string/pref_cat_fish">
+        <ListPreference
+            android:defaultValue="1"
+            android:entries="@array/fish_density_entries"
+            android:entryValues="@array/fish_density_values"
+            android:key="fish_density"
+            android:summary="%s"
+            android:title="@string/pref_fish_density" />
+        <CheckBoxPreference
+            android:defaultValue="true"
+            android:key="tap_to_feed"
+            android:summary="@string/pref_tap_to_feed_summary"
+            android:title="@string/pref_tap_to_feed" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="@string/pref_cat_effects">
+        <CheckBoxPreference
+            android:defaultValue="true"
+            android:key="bubbles"
+            android:title="@string/pref_bubbles" />
+        <CheckBoxPreference
+            android:defaultValue="true"
+            android:key="light_rays"
+            android:title="@string/pref_light_rays" />
+        <CheckBoxPreference
+            android:defaultValue="true"
+            android:key="caustics"
+            android:summary="@string/pref_caustics_summary"
+            android:title="@string/pref_caustics" />
+        <CheckBoxPreference
+            android:defaultValue="true"
+            android:key="parallax"
+            android:summary="@string/pref_parallax_summary"
+            android:title="@string/pref_parallax" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="@string/pref_cat_performance">
+        <ListPreference
+            android:defaultValue="30"
+            android:entries="@array/frame_rate_entries"
+            android:entryValues="@array/frame_rate_values"
+            android:key="frame_rate"
+            android:summary="%s"
+            android:title="@string/pref_frame_rate" />
+    </PreferenceCategory>
+</PreferenceScreen>

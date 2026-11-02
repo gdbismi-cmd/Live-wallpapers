@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Aquarium Live Wallpaper</string>
+    <string name="wallpaper_name">Aquarium</string>
+    <string name="author">Live Wallpapers</string>
+    <string name="wallpaper_description">A planted freshwater aquarium with schooling fish, swaying plants, rising bubbles and shimmering light. Tap the screen to feed the fish.</string>
+    <string name="settings_title">Aquarium settings</string>
+    <string name="set_wallpaper_failed">Open your wallpaper settings and choose \"Aquarium\" under live wallpapers.</string>
+
+    <string name="pref_cat_fish">Fish</string>
+    <string name="pref_fish_density">Number of fish</string>
+    <string name="pref_tap_to_feed">Tap to feed</string>
+    <string name="pref_tap_to_feed_summary">Tap an empty part of the home screen to drop food flakes</string>
+
+    <string name="pref_cat_effects">Effects</string>
+    <string name="pref_bubbles">Air stone bubbles</string>
+    <string name="pref_light_rays">Light rays</string>
+    <string name="pref_caustics">Caustics</string>
+    <string name="pref_caustics_summary">Rippling light patterns on the sand</string>
+    <string name="pref_parallax">Parallax scrolling</string>
+    <string name="pref_parallax_summary">Pan across the tank as you swipe between home screens</string>
+
+    <string name="pref_cat_performance">Performance</string>
+    <string name="pref_frame_rate">Frame rate</string>
+
+    <string-array name="fish_density_entries">
+        <item>Few</item>
+        <item>Normal</item>
+        <item>Many</item>
+    </string-array>
+    <string-array name="fish_density_values" translatable="false">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+    </string-array>
+    <string-array name="frame_rate_entries">
+        <item>30 fps (battery saver)</item>
+        <item>60 fps (smooth)</item>
+    </string-array>
+    <string-array name="frame_rate_values" translatable="false">
+        <item>30</item>
+        <item>60</item>
+    </string-array>
+</resources>
